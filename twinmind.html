@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TwinMind — Live Suggestions</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── RESET & VARIABLES ────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --col:      #161b27;
+      --border:   rgba(255,255,255,0.07);
+      --border2:  rgba(255,255,255,0.12);
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --faint:    #1e2433;
+
+      /* suggestion type accents */
+      --question: #3b82f6;
+      --talking:  #8b5cf6;
+      --answer:   #10b981;
+      --factcheck:#f59e0b;
+      --clarify:  #64748b;
+
+      --btn-bg:   #1e293b;
+      --btn-hover:#273348;
+      --radius:   8px;
+      --font-mono:'JetBrains Mono', monospace;
+      --font-body:'Geist', system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 14px;
+    }
+
+    /* ── TOP BAR ──────────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--col);
+      flex-shrink: 0;
+    }
+    .topbar-title { font-weight: 600; font-size: 14px; }
+    .topbar-actions { display: flex; gap: 8px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: var(--radius);
+      background: var(--btn-bg); border: 1px solid var(--border2);
+      color: var(--text); font-family: var(--font-body);
+      font-size: 12px; cursor: pointer; transition: background .15s;
+    }
+    .btn:hover { background: var(--btn-hover); }
+    .btn-primary { background: #2563eb; border-color: #3b82f6; }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    /* ── MAIN 3-COLUMN LAYOUT ─────────────────────────── */
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .column {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .column:last-child { border-right: none; }
+
+    .col-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      color: var(--muted);
+      text-transform: uppercase;
+      flex-shrink: 0;
+      background: var(--col);
+    }
+
+    .col-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: #334155 transparent;
+    }
+
+    /* ── COLUMN 1: TRANSCRIPT ─────────────────────────── */
+    .mic-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .mic-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: #2563eb;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s;
+      flex-shrink: 0;
+    }
+    .mic-btn:hover { background: #1d4ed8; transform: scale(1.05); }
+    .mic-btn.recording { background: #dc2626; animation: pulse-mic 1.5s ease-in-out infinite; }
+    .mic-btn svg { width: 20px; height: 20px; fill: white; }
+
+    @keyframes pulse-mic {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.4); }
+      50%       { box-shadow: 0 0 0 8px rgba(220,38,38,0); }
+    }
+
+    .mic-status { font-size: 13px; color: var(--muted); }
+
+    .transcript-line {
+      margin-bottom: 10px;
+      line-height: 1.6;
+    }
+    .transcript-time {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-right: 8px;
+    }
+    .transcript-text { color: var(--text); }
+
+    .transcript-hint {
+      background: var(--faint);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    /* ── COLUMN 2: SUGGESTIONS ────────────────────────── */
+    .suggestions-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-shrink: 0;
+    }
+
+    .countdown {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .batch {
+      margin-bottom: 24px;
+    }
+    .batch-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+      margin: 12px 0 8px;
+    }
+    .batch.old { opacity: .5; }
+
+    .suggestion-card {
+      background: var(--faint);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .suggestion-card:hover {
+      border-color: var(--border2);
+      background: #252d3d;
+    }
+
+    .suggestion-type {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .suggestion-type.QUESTION   { color: var(--question); }
+    .suggestion-type.TALKING    { color: var(--talking);  }
+    .suggestion-type.ANSWER     { color: var(--answer);   }
+    .suggestion-type.FACT_CHECK { color: var(--factcheck); }
+    .suggestion-type.CLARIFY    { color: var(--clarify);  }
+
+    .suggestion-preview {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    .loading-suggestions {
+      text-align: center;
+      padding: 32px 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border2);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── COLUMN 3: CHAT ───────────────────────────────── */
+    .chat-intro {
+      background: var(--faint);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .chat-message { margin-bottom: 16px; }
+
+    .chat-role {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .chat-role.you { color: #60a5fa; }
+    .chat-role.assistant { color: #a78bfa; }
+
+    .chat-bubble {
+      background: var(--faint);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text);
+    }
+    .chat-bubble.you { background: #1e3a5f; }
+
+    .chat-footer {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--col);
+      flex-shrink: 0;
+    }
+    .chat-input {
+      flex: 1;
+      background: var(--faint);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .chat-input:focus { border-color: #3b82f6; }
+    .chat-input::placeholder { color: var(--muted); }
+
+    /* ── SETTINGS MODAL ───────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: #1a2035;
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      width: 640px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .modal-title { font-size: 16px; font-weight: 600; }
+    .modal-close {
+      background: none; border: none; color: var(--muted);
+      font-size: 20px; cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .field input, .field textarea, .field select {
+      width: 100%;
+      background: var(--faint);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: #3b82f6; }
+    .field textarea { resize: vertical; min-height: 80px; font-size: 12px; line-height: 1.6; font-family: var(--font-mono); }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+    /* ── SCROLLBAR ────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ─────────────────────────────────────────────────
+  TOP BAR
+───────────────────────────────────────────────── -->
+<div class="topbar">
+  <span class="topbar-title">TwinMind — Live Suggestions</span>
+  <div class="topbar-actions">
+    <button class="btn" onclick="exportSession()">↓ Export</button>
+    <button class="btn" onclick="openSettings()">⚙ Settings</button>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────
+  3-COLUMN LAYOUT
+───────────────────────────────────────────────── -->
+<div class="columns">
+
+  <!-- COLUMN 1: TRANSCRIPT -->
+  <div class="column">
+    <div class="col-header">
+      <span>1. Mic &amp; Transcript</span>
+      <span id="rec-status">IDLE</span>
+    </div>
+    <div class="col-body" id="transcript-col">
+      <div class="mic-row">
+        <button class="mic-btn" id="mic-btn" onclick="toggleMic()">
+          <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 15.93A8.001 8.001 0 0 1 4 11H2a10 10 0 0 0 9 9.95V23h2v-2.05A10 10 0 0 0 22 11h-2a8 8 0 0 1-7 7.93V17z"/></svg>
+        </button>
+        <span class="mic-status" id="mic-status">Click to start recording</span>
+      </div>
+
+      <div class="transcript-hint" id="transcript-hint">
+        Transcript appends every ~30s while recording. Click the mic to begin.
+      </div>
+
+      <div id="transcript-lines"></div>
+    </div>
+  </div>
+
+  <!-- COLUMN 2: LIVE SUGGESTIONS -->
+  <div class="column">
+    <div class="col-header">
+      <span>2. Live Suggestions</span>
+      <span id="batch-count">0 BATCHES</span>
+    </div>
+    <div class="col-body" id="suggestions-col">
+      <div class="suggestions-toolbar">
+        <button class="btn" onclick="manualRefresh()">↻ Reload suggestions</button>
+        <span class="countdown" id="countdown"></span>
+      </div>
+      <div id="suggestion-batches">
+        <!-- batches injected here, newest first -->
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUMN 3: CHAT -->
+  <div class="column" style="display:flex; flex-direction:column;">
+    <div class="col-header">
+      <span>3. Chat (Detailed Answers)</span>
+      <span>SESSION-ONLY</span>
+    </div>
+    <div class="col-body" id="chat-col">
+      <div class="chat-intro">
+        Clicking a suggestion adds it to this chat and streams a detailed answer. You can also type questions directly.
+      </div>
+      <div id="chat-messages"></div>
+    </div>
+    <div class="chat-footer">
+      <input class="chat-input" id="chat-input" placeholder="Ask anything…"
+        onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendChat(); }" />
+      <button class="btn btn-primary" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ─────────────────────────────────────────────────
+  SETTINGS MODAL
+───────────────────────────────────────────────── -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Settings</span>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+
+    <div class="field">
+      <label>Groq API Key</label>
+      <input type="password" id="s-api-key" placeholder="gsk_…" />
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>LLM Model</label>
+        <input id="s-llm-model" />
+      </div>
+      <div class="field">
+        <label>Whisper Model</label>
+        <input id="s-whisper-model" />
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Suggestion context (lines)</label>
+        <input type="number" id="s-suggestion-ctx" min="3" max="50" />
+      </div>
+      <div class="field">
+        <label>Chat context (lines)</label>
+        <input type="number" id="s-chat-ctx" min="5" max="200" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Live Suggestions Prompt</label>
+      <textarea id="s-suggestion-prompt" style="min-height:140px;"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Detailed Chat Answer Prompt</label>
+      <textarea id="s-chat-prompt" style="min-height:100px;"></textarea>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="resetSettings()">Reset to Defaults</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  DEFAULTS — optimal prompts & parameters
+// ══════════════════════════════════════════════════════════════
+
+const DEFAULTS = {
+  apiKey:        '',
+  llmModel:      'moonshotai/kimi-k2-instruct',  // Groq's capable OSS model
+  whisperModel:  'whisper-large-v3',
+  suggestionCtx: 12,   // recent transcript lines used for suggestions
+  chatCtx:       60,   // transcript lines included in chat context
+
+  // ── SUGGESTION PROMPT ──────────────────────────────────────
+  // Goal: surface the right type of help at the right moment.
+  // We pass recent transcript + conversation flow cues.
+  suggestionPrompt: `You are a real-time conversation assistant. Analyze the recent transcript and surface 3 genuinely useful suggestions for the person listening right now.
+
+RECENT TRANSCRIPT:
+{{transcript}}
+
+Choose suggestion types based on what just happened:
+- If a question was just asked → prioritize ANSWER (give the answer directly)
+- If a claim or statistic was stated → consider FACT_CHECK (verify or correct it)
+- If a technical topic is being discussed → TALKING_POINT (add a relevant insight or data point)
+- If something is unclear → CLARIFY (offer a concise definition or context)
+- If the conversation needs direction → QUESTION (a sharp question to ask next)
+
+Rules:
+1. Each preview must be useful on its own — no click required to get value.
+2. Be specific, not generic. Reference the actual content being discussed.
+3. Keep each preview to 1–2 crisp sentences.
+4. Mix types based on context. Do not always use the same 3 types.
+5. Respond ONLY with valid JSON — no extra text.
+
+JSON format:
+{
+  "suggestions": [
+    {"type": "ANSWER",      "preview": "…"},
+    {"type": "TALKING",     "preview": "…"},
+    {"type": "FACT_CHECK",  "preview": "…"}
+  ]
+}
+
+Valid types: QUESTION, TALKING, ANSWER, FACT_CHECK, CLARIFY`,
+
+  // ── CHAT PROMPT ────────────────────────────────────────────
+  // Goal: detailed, contextual answer using full transcript.
+  chatPrompt: `You are a knowledgeable meeting assistant with full context of the ongoing conversation.
+
+FULL TRANSCRIPT:
+{{transcript}}
+
+CONVERSATION HISTORY:
+{{history}}
+
+USER'S QUESTION:
+{{question}}
+
+Provide a detailed, accurate, and well-structured answer. Use the transcript context to be specific. Format with short paragraphs. Be direct — no filler preamble like "Great question!".`
+};
+
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+
+let cfg = loadSettings();  // merged defaults + localStorage
+
+const state = {
+  isRecording:    false,
+  transcript:     [],     // [{time: Date, text: string}]
+  batches:        [],     // [{time: Date, suggestions: [{type, preview}]}]
+  chatHistory:    [],     // [{role: 'you'|'assistant', content, time: Date}]
+  mediaRecorder:  null,
+  audioChunks:    [],
+  stream:         null,
+  cycleTimeout:   null,
+  countdownTimer: null,
+  countdownSecs:  30,
+  loadingSuggestions: false,
+};
+
+// ══════════════════════════════════════════════════════════════
+//  SETTINGS — load / save / reset
+// ══════════════════════════════════════════════════════════════
+
+function loadSettings() {
+  const saved = JSON.parse(localStorage.getItem('tm_settings') || '{}');
+  return { ...DEFAULTS, ...saved };
+}
+
+function saveSettings() {
+  cfg.apiKey        = document.getElementById('s-api-key').value.trim();
+  cfg.llmModel      = document.getElementById('s-llm-model').value.trim();
+  cfg.whisperModel  = document.getElementById('s-whisper-model').value.trim();
+  cfg.suggestionCtx = parseInt(document.getElementById('s-suggestion-ctx').value, 10);
+  cfg.chatCtx       = parseInt(document.getElementById('s-chat-ctx').value, 10);
+  cfg.suggestionPrompt = document.getElementById('s-suggestion-prompt').value;
+  cfg.chatPrompt       = document.getElementById('s-chat-prompt').value;
+  localStorage.setItem('tm_settings', JSON.stringify(cfg));
+  closeSettings();
+}
+
+function resetSettings() {
+  cfg = { ...DEFAULTS };
+  populateSettingsForm();
+}
+
+function openSettings() {
+  populateSettingsForm();
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function populateSettingsForm() {
+  document.getElementById('s-api-key').value          = cfg.apiKey || '';
+  document.getElementById('s-llm-model').value        = cfg.llmModel;
+  document.getElementById('s-whisper-model').value    = cfg.whisperModel;
+  document.getElementById('s-suggestion-ctx').value   = cfg.suggestionCtx;
+  document.getElementById('s-chat-ctx').value         = cfg.chatCtx;
+  document.getElementById('s-suggestion-prompt').value = cfg.suggestionPrompt;
+  document.getElementById('s-chat-prompt').value      = cfg.chatPrompt;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MIC + AUDIO RECORDING
+// ══════════════════════════════════════════════════════════════
+
+async function toggleMic() {
+  if (state.isRecording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  if (!cfg.apiKey) {
+    alert('Paste your Groq API key in Settings first.');
+    openSettings();
+    return;
+  }
+
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    alert('Microphone access denied: ' + err.message);
+    return;
+  }
+
+  state.isRecording = true;
+  updateMicUI(true);
+  startCountdown();
+  runRecordingCycle();
+}
+
+function stopRecording() {
+  state.isRecording = false;
+  updateMicUI(false);
+
+  // Stop any active recorder
+  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+    state.mediaRecorder.stop();
+  }
+  // Stop mic stream tracks
+  if (state.stream) {
+    state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
+  }
+
+  clearTimeout(state.cycleTimeout);
+  stopCountdown();
+}
+
+// Records one 30-second chunk, transcribes it, then repeats.
+async function runRecordingCycle() {
+  if (!state.isRecording) return;
+
+  state.audioChunks = [];
+
+  // Pick the first supported MIME type
+  const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(
+    m => MediaRecorder.isTypeSupported(m)
+  ) || '';
+
+  state.mediaRecorder = new MediaRecorder(state.stream, mimeType ? { mimeType } : {});
+  state.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) state.audioChunks.push(e.data); };
+
+  state.mediaRecorder.onstop = async () => {
+    if (state.audioChunks.length === 0) { if (state.isRecording) runRecordingCycle(); return; }
+
+    const blob = new Blob(state.audioChunks, { type: state.audioChunks[0].type || 'audio/webm' });
+    const text = await transcribeAudio(blob);
+
+    if (text && text.trim()) {
+      addTranscriptLine(text.trim());
+      await refreshSuggestions();
+    }
+
+    // Immediately start the next cycle
+    if (state.isRecording) runRecordingCycle();
+  };
+
+  state.mediaRecorder.start();
+
+  // Stop this chunk after 30s
+  state.cycleTimeout = setTimeout(() => {
+    if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+      state.mediaRecorder.stop();
+    }
+  }, 30_000);
+
+  // Reset countdown display
+  state.countdownSecs = 30;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GROQ API — TRANSCRIPTION
+// ══════════════════════════════════════════════════════════════
+
+async function transcribeAudio(blob) {
+  const form = new FormData();
+  form.append('file', blob, 'audio.webm');
+  form.append('model', cfg.whisperModel);
+  form.append('response_format', 'json');
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'Transcription error');
+    return data.text || '';
+  } catch (err) {
+    console.error('Transcription error:', err);
+    return '';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GROQ API — CHAT COMPLETIONS (suggestions + chat)
+// ══════════════════════════════════════════════════════════════
+
+async function groqChat(messages, maxTokens = 800) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: cfg.llmModel,
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.5,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'LLM error');
+  return data.choices[0].message.content;
+}
+
+// Streaming version for chat — calls onChunk with each delta
+async function groqChatStream(messages, onChunk, maxTokens = 1200) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: cfg.llmModel,
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.5,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || 'Stream error');
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = dec.decode(value, { stream: true });
+    for (const line of chunk.split('\n')) {
+      const trimmed = line.replace(/^data: /, '').trim();
+      if (!trimmed || trimmed === '[DONE]') continue;
+      try {
+        const json = JSON.parse(trimmed);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) onChunk(delta);
+      } catch { /* skip malformed SSE lines */ }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SUGGESTIONS
+// ══════════════════════════════════════════════════════════════
+
+// Get the last N transcript lines as a formatted string
+function getRecentTranscript(n) {
+  return state.transcript
+    .slice(-n)
+    .map(l => `[${formatTime(l.time)}] ${l.text}`)
+    .join('\n');
+}
+
+async function refreshSuggestions() {
+  if (state.loadingSuggestions) return;
+  if (state.transcript.length === 0) return;
+
+  state.loadingSuggestions = true;
+  showLoadingSuggestions();
+
+  const recentTranscript = getRecentTranscript(cfg.suggestionCtx);
+  const prompt = cfg.suggestionPrompt.replace('{{transcript}}', recentTranscript);
+
+  try {
+    const raw = await groqChat([{ role: 'user', content: prompt }], 600);
+
+    // Parse JSON — strip markdown fences if present
+    const clean = raw.replace(/^```json\s*/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+    const parsed = JSON.parse(clean);
+    const suggestions = parsed.suggestions || [];
+
+    if (suggestions.length > 0) {
+      addBatch(suggestions);
+    }
+  } catch (err) {
+    console.error('Suggestion error:', err);
+    hidLoadingSuggestions();
+  } finally {
+    state.loadingSuggestions = false;
+  }
+}
+
+// Manual refresh: stop current audio chunk immediately, process it, restart
+function manualRefresh() {
+  if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+    clearTimeout(state.cycleTimeout);
+    state.mediaRecorder.stop();   // onstop handler will process + restart
+  } else if (state.transcript.length > 0) {
+    refreshSuggestions();
+  }
+  state.countdownSecs = 30;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CHAT
+// ══════════════════════════════════════════════════════════════
+
+// Called when user clicks a suggestion card
+async function clickSuggestion(type, preview) {
+  const question = `[${type}] ${preview}`;
+  await sendChatMessage(question);
+}
+
+// Called when user types and hits Send
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  await sendChatMessage(text);
+}
+
+async function sendChatMessage(question) {
+  if (!cfg.apiKey) { alert('Set your Groq API key in Settings.'); openSettings(); return; }
+
+  // Add user message to UI + history
+  const userMsg = { role: 'you', content: question, time: new Date() };
+  state.chatHistory.push(userMsg);
+  renderChatMessage(userMsg);
+
+  // Build LLM messages
+  const fullTranscript = getRecentTranscript(cfg.chatCtx);
+  const historyText = state.chatHistory
+    .filter(m => m.role !== 'you' || m.content !== question)  // exclude current question
+    .map(m => `${m.role === 'you' ? 'USER' : 'ASSISTANT'}: ${m.content}`)
+    .join('\n\n');
+
+  const systemPrompt = cfg.chatPrompt
+    .replace('{{transcript}}', fullTranscript)
+    .replace('{{history}}', historyText || '(none yet)')
+    .replace('{{question}}', question);
+
+  // Add placeholder for assistant
+  const assistantMsg = { role: 'assistant', content: '', time: new Date() };
+  state.chatHistory.push(assistantMsg);
+  const el = renderChatMessage(assistantMsg);
+
+  try {
+    await groqChatStream(
+      [{ role: 'user', content: systemPrompt }],
+      delta => {
+        assistantMsg.content += delta;
+        el.querySelector('.chat-bubble').textContent = assistantMsg.content;
+        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    );
+  } catch (err) {
+    assistantMsg.content = 'Error: ' + err.message;
+    el.querySelector('.chat-bubble').textContent = assistantMsg.content;
+  }
+
+  scrollChatToBottom();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  EXPORT
+// ══════════════════════════════════════════════════════════════
+
+function exportSession() {
+  const session = {
+    exportedAt: new Date().toISOString(),
+    transcript: state.transcript.map(l => ({
+      time: l.time.toISOString(), text: l.text
+    })),
+    suggestionBatches: state.batches.map(b => ({
+      time: b.time.toISOString(),
+      suggestions: b.suggestions
+    })),
+    chatHistory: state.chatHistory.map(m => ({
+      role: m.role, content: m.content, time: m.time.toISOString()
+    })),
+  };
+
+  const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `twinmind-session-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════════════════════════
+
+function updateMicUI(recording) {
+  const btn = document.getElementById('mic-btn');
+  const status = document.getElementById('mic-status');
+  const recStatus = document.getElementById('rec-status');
+
+  btn.classList.toggle('recording', recording);
+  status.textContent = recording ? 'Recording…  click to stop' : 'Click to start recording';
+  recStatus.textContent = recording ? 'LIVE' : 'IDLE';
+}
+
+function addTranscriptLine(text) {
+  const line = { time: new Date(), text };
+  state.transcript.push(line);
+
+  // Hide hint after first transcript line
+  const hint = document.getElementById('transcript-hint');
+  if (hint) hint.style.display = 'none';
+
+  const container = document.getElementById('transcript-lines');
+  const el = document.createElement('div');
+  el.className = 'transcript-line';
+  el.innerHTML = `<span class="transcript-time">${formatTime(line.time)}</span><span class="transcript-text">${escapeHtml(text)}</span>`;
+  container.appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+function addBatch(suggestions) {
+  const batch = { time: new Date(), suggestions };
+  state.batches.push(batch);
+
+  const container = document.getElementById('suggestion-batches');
+
+  // Fade all existing batches
+  container.querySelectorAll('.batch').forEach(el => el.classList.add('old'));
+
+  // Prepend new batch at top
+  const batchEl = document.createElement('div');
+  batchEl.className = 'batch';
+  batchEl.innerHTML = suggestions.map(s => `
+    <div class="suggestion-card" onclick="clickSuggestion('${s.type}', ${JSON.stringify(s.preview)})">
+      <div class="suggestion-type ${s.type}">${labelFor(s.type)}</div>
+      <div class="suggestion-preview">${escapeHtml(s.preview)}</div>
+    </div>
+  `).join('') + `<div class="batch-label">— BATCH ${state.batches.length} · ${formatTime(batch.time)} —</div>`;
+
+  container.insertBefore(batchEl, container.firstChild);
+
+  // Update header count
+  document.getElementById('batch-count').textContent = `${state.batches.length} BATCH${state.batches.length === 1 ? '' : 'ES'}`;
+}
+
+function showLoadingSuggestions() {
+  const container = document.getElementById('suggestion-batches');
+  const existing = container.querySelector('.loading-suggestions');
+  if (existing) return;
+  const el = document.createElement('div');
+  el.className = 'loading-suggestions';
+  el.innerHTML = '<span class="spinner"></span> Generating suggestions…';
+  container.insertBefore(el, container.firstChild);
+}
+
+function hidLoadingSuggestions() {
+  document.getElementById('suggestion-batches').querySelector('.loading-suggestions')?.remove();
+}
+
+function renderChatMessage(msg) {
+  const container = document.getElementById('chat-messages');
+  const el = document.createElement('div');
+  el.className = 'chat-message';
+  el.innerHTML = `
+    <div class="chat-role ${msg.role}">${msg.role === 'you' ? 'YOU' : 'ASSISTANT'}</div>
+    <div class="chat-bubble ${msg.role}">${escapeHtml(msg.content)}</div>
+  `;
+  container.appendChild(el);
+  scrollChatToBottom();
+  return el;
+}
+
+function scrollChatToBottom() {
+  const col = document.getElementById('chat-col');
+  col.scrollTop = col.scrollHeight;
+}
+
+// Countdown display in suggestions header
+function startCountdown() {
+  state.countdownSecs = 30;
+  updateCountdownDisplay();
+  state.countdownTimer = setInterval(() => {
+    state.countdownSecs = Math.max(0, state.countdownSecs - 1);
+    updateCountdownDisplay();
+    if (state.countdownSecs <= 0) state.countdownSecs = 30;
+  }, 1000);
+}
+
+function stopCountdown() {
+  clearInterval(state.countdownTimer);
+  document.getElementById('countdown').textContent = '';
+}
+
+function updateCountdownDisplay() {
+  const el = document.getElementById('countdown');
+  if (el) el.textContent = state.isRecording ? `auto-refresh in ${state.countdownSecs}s` : '';
+}
+
+// ── UTILITIES ──────────────────────────────────────────────
+function formatTime(date) {
+  return date.toLocaleTimeString('en-US', { hour12: false });
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function labelFor(type) {
+  const labels = {
+    QUESTION: 'Question to Ask',
+    TALKING:  'Talking Point',
+    ANSWER:   'Answer',
+    FACT_CHECK: 'Fact-Check',
+    CLARIFY:  'Clarify',
+  };
+  return labels[type] || type;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+
+// If no API key saved, prompt settings on load
+if (!cfg.apiKey) {
+  // Delay slightly so page renders first
+  setTimeout(() => {
+    if (!cfg.apiKey) openSettings();
+  }, 300);
+}
+</script>
+</body>
+</html>
