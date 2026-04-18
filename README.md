@@ -116,6 +116,9 @@ Clicking **Export** downloads a JSON file with three keys:
 - **Web Speech / MediaRecorder API** — native browser audio capture
 - **`localStorage`** — settings persistence across sessions
 
+##URL - https://magnificent-alfajores-2c8b7e.netlify.app/
+
+
 ---
 
 ## Privacy Note
