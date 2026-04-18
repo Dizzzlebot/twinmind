@@ -126,7 +126,47 @@
     }
     .mic-btn:hover { background: #1d4ed8; transform: scale(1.05); }
     .mic-btn.recording { background: #dc2626; animation: pulse-mic 1.5s ease-in-out infinite; }
+    .mic-btn.no-key { background: #4b5563; cursor: not-allowed; }
+    .mic-btn.no-key:hover { background: #4b5563; transform: none; }
     .mic-btn svg { width: 20px; height: 20px; fill: white; }
+
+    .api-key-banner {
+      display: none;
+      background: #1c1917;
+      border: 1px solid #f59e0b;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #fcd34d;
+      margin-bottom: 14px;
+      line-height: 1.6;
+    }
+    .api-key-banner.visible { display: block; }
+    .api-key-banner a { color: #fbbf24; cursor: pointer; text-decoration: underline; }
+
+    .rec-wave {
+      display: none;
+      align-items: center;
+      gap: 3px;
+      margin-left: 4px;
+    }
+    .rec-wave.visible { display: flex; }
+    .rec-wave span {
+      display: block;
+      width: 3px;
+      border-radius: 2px;
+      background: #dc2626;
+      animation: wave 0.9s ease-in-out infinite;
+    }
+    .rec-wave span:nth-child(1) { height: 8px;  animation-delay: 0s; }
+    .rec-wave span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+    .rec-wave span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+    .rec-wave span:nth-child(4) { height: 16px; animation-delay: 0.1s; }
+    .rec-wave span:nth-child(5) { height: 8px;  animation-delay: 0.25s; }
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.5); opacity: 0.6; }
+      50%       { transform: scaleY(1);   opacity: 1; }
+    }
 
     @keyframes pulse-mic {
       0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.4); }
@@ -389,7 +429,16 @@
         <button class="mic-btn" id="mic-btn" onclick="toggleMic()">
           <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 15.93A8.001 8.001 0 0 1 4 11H2a10 10 0 0 0 9 9.95V23h2v-2.05A10 10 0 0 0 22 11h-2a8 8 0 0 1-7 7.93V17z"/></svg>
         </button>
-        <span class="mic-status" id="mic-status">Click to start recording</span>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span class="mic-status" id="mic-status">Click to start recording</span>
+          <div class="rec-wave" id="rec-wave">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="api-key-banner" id="api-key-banner">
+        ⚠ No Groq API key set. <a onclick="openSettings()">Open Settings</a> and paste your key to begin recording. Get one free at <a onclick="openLink('https://console.groq.com/keys')">console.groq.com/keys</a>
       </div>
 
       <div class="transcript-hint" id="transcript-hint">
@@ -456,7 +505,13 @@
     <div class="field-row">
       <div class="field">
         <label>LLM Model</label>
-        <input id="s-llm-model" />
+        <select id="s-llm-model">
+          <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (recommended)</option>
+          <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (fastest)</option>
+          <option value="llama3-70b-8192">llama3-70b-8192</option>
+          <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
+          <option value="gemma2-9b-it">gemma2-9b-it</option>
+        </select>
       </div>
       <div class="field">
         <label>Whisper Model</label>
@@ -499,7 +554,7 @@
 
 const DEFAULTS = {
   apiKey:        '',
-  llmModel:      'moonshotai/kimi-k2-instruct',  // Groq's capable OSS model
+  llmModel:      'llama-3.3-70b-versatile',  // Groq-hosted model (fast + capable)
   whisperModel:  'whisper-large-v3',
   suggestionCtx: 12,   // recent transcript lines used for suggestions
   chatCtx:       60,   // transcript lines included in chat context
@@ -515,7 +570,7 @@ RECENT TRANSCRIPT:
 Choose suggestion types based on what just happened:
 - If a question was just asked → prioritize ANSWER (give the answer directly)
 - If a claim or statistic was stated → consider FACT_CHECK (verify or correct it)
-- If a technical topic is being discussed → TALKING_POINT (add a relevant insight or data point)
+- If a technical topic is being discussed → TALKING (add a relevant insight or data point)
 - If something is unclear → CLARIFY (offer a concise definition or context)
 - If the conversation needs direction → QUESTION (a sharp question to ask next)
 
@@ -591,6 +646,12 @@ function saveSettings() {
   cfg.suggestionPrompt = document.getElementById('s-suggestion-prompt').value;
   cfg.chatPrompt       = document.getElementById('s-chat-prompt').value;
   localStorage.setItem('tm_settings', JSON.stringify(cfg));
+
+  // Update banner + mic state based on whether key is now set
+  const hasCfg = !!cfg.apiKey;
+  document.getElementById('api-key-banner').classList.toggle('visible', !hasCfg);
+  document.getElementById('mic-btn').classList.toggle('no-key', !hasCfg);
+
   closeSettings();
 }
 
@@ -610,7 +671,7 @@ function closeSettings() {
 
 function populateSettingsForm() {
   document.getElementById('s-api-key').value          = cfg.apiKey || '';
-  document.getElementById('s-llm-model').value        = cfg.llmModel;
+  document.getElementById('s-llm-model').value        = cfg.llmModel || 'llama-3.3-70b-versatile';
   document.getElementById('s-whisper-model').value    = cfg.whisperModel;
   document.getElementById('s-suggestion-ctx').value   = cfg.suggestionCtx;
   document.getElementById('s-chat-ctx').value         = cfg.chatCtx;
@@ -632,15 +693,22 @@ async function toggleMic() {
 
 async function startRecording() {
   if (!cfg.apiKey) {
-    alert('Paste your Groq API key in Settings first.');
+    document.getElementById('api-key-banner').classList.add('visible');
+    document.getElementById('mic-btn').classList.add('no-key');
     openSettings();
     return;
   }
 
+  document.getElementById('api-key-banner').classList.remove('visible');
+  document.getElementById('mic-btn').classList.remove('no-key');
+
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    alert('Microphone access denied: ' + err.message);
+    const msg = err.name === 'NotAllowedError'
+      ? 'Microphone permission denied. Allow mic access in your browser and try again.'
+      : 'Microphone error: ' + err.message;
+    alert(msg);
     return;
   }
 
@@ -697,7 +765,7 @@ async function runRecordingCycle() {
     if (state.isRecording) runRecordingCycle();
   };
 
-  state.mediaRecorder.start();
+  state.mediaRecorder.start(3000); // emit data every 3s so recording feels live
 
   // Stop this chunk after 30s
   state.cycleTimeout = setTimeout(() => {
@@ -836,6 +904,13 @@ async function refreshSuggestions() {
   } catch (err) {
     console.error('Suggestion error:', err);
     hidLoadingSuggestions();
+    const container = document.getElementById('suggestion-batches');
+    const errEl = document.createElement('div');
+    errEl.className = 'loading-suggestions';
+    errEl.style.color = '#f87171';
+    errEl.textContent = '⚠ Suggestion error: ' + err.message;
+    container.insertBefore(errEl, container.firstChild);
+    setTimeout(() => errEl.remove(), 8000);
   } finally {
     state.loadingSuggestions = false;
   }
@@ -949,8 +1024,11 @@ function updateMicUI(recording) {
   const btn = document.getElementById('mic-btn');
   const status = document.getElementById('mic-status');
   const recStatus = document.getElementById('rec-status');
+  const wave = document.getElementById('rec-wave');
 
   btn.classList.toggle('recording', recording);
+  btn.classList.remove('no-key');
+  wave.classList.toggle('visible', recording);
   status.textContent = recording ? 'Recording…  click to stop' : 'Click to start recording';
   recStatus.textContent = recording ? 'LIVE' : 'IDLE';
 }
@@ -980,15 +1058,33 @@ function addBatch(suggestions) {
   // Fade all existing batches
   container.querySelectorAll('.batch').forEach(el => el.classList.add('old'));
 
-  // Prepend new batch at top
+  // Prepend new batch at top — use DOM APIs (not innerHTML) so quotes in
+  // preview text can never break event handlers
   const batchEl = document.createElement('div');
   batchEl.className = 'batch';
-  batchEl.innerHTML = suggestions.map(s => `
-    <div class="suggestion-card" onclick="clickSuggestion('${s.type}', ${JSON.stringify(s.preview)})">
-      <div class="suggestion-type ${s.type}">${labelFor(s.type)}</div>
-      <div class="suggestion-preview">${escapeHtml(s.preview)}</div>
-    </div>
-  `).join('') + `<div class="batch-label">— BATCH ${state.batches.length} · ${formatTime(batch.time)} —</div>`;
+
+  suggestions.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'suggestion-card';
+
+    const typeEl = document.createElement('div');
+    typeEl.className = `suggestion-type ${s.type}`;
+    typeEl.textContent = labelFor(s.type);
+
+    const previewEl = document.createElement('div');
+    previewEl.className = 'suggestion-preview';
+    previewEl.textContent = s.preview;   // textContent is safe — no XSS, no escaping needed
+
+    card.appendChild(typeEl);
+    card.appendChild(previewEl);
+    card.addEventListener('click', () => clickSuggestion(s.type, s.preview));
+    batchEl.appendChild(card);
+  });
+
+  const label = document.createElement('div');
+  label.className = 'batch-label';
+  label.textContent = `— BATCH ${state.batches.length} · ${formatTime(batch.time)} —`;
+  batchEl.appendChild(label);
 
   container.insertBefore(batchEl, container.firstChild);
 
@@ -1077,11 +1173,12 @@ function labelFor(type) {
 //  INIT
 // ══════════════════════════════════════════════════════════════
 
-// If no API key saved, prompt settings on load
+// If no API key saved, show banner and prompt settings on load
 if (!cfg.apiKey) {
-  // Delay slightly so page renders first
   setTimeout(() => {
-    if (!cfg.apiKey) openSettings();
+    document.getElementById('api-key-banner')?.classList.add('visible');
+    document.getElementById('mic-btn')?.classList.add('no-key');
+    openSettings();
   }, 300);
 }
 </script>
